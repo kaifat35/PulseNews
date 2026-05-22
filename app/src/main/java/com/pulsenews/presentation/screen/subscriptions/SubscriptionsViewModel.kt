@@ -38,6 +38,9 @@ class SubscriptionsViewModel @Inject constructor(
     val state = _state.asStateFlow()
 
     init {
+        _state.update {
+            it.copy(favoriteUrls = preferences.getStringSet("favorites", emptySet()) ?: emptySet())
+        }
         observeSubscriptions()
         observeSelectedTopics()
     }
@@ -69,11 +72,11 @@ class SubscriptionsViewModel @Inject constructor(
                 it.copy(subscriptions = subscriptions)
             }
 
-            is SubscriptionsCommand.SwipeArticle -> rateArticle(command.article, command.liked)
+            is SubscriptionsCommand.SwipeArticle -> onArticleSwiped(command.article, command.liked)
         }
     }
 
-    private fun rateArticle(article: Article, liked: Boolean) {
+    private fun onArticleSwiped(article: Article, liked: Boolean) {
         val tokens = tokenize(article)
         preferences.edit().apply {
             val setKey = if (liked) "favorites" else "disliked"
@@ -87,6 +90,18 @@ class SubscriptionsViewModel @Inject constructor(
                 putInt(key, current + if (liked) 2 else -1)
             }
         }.apply()
+
+        val favorites = preferences.getStringSet("favorites", emptySet()) ?: emptySet()
+        _state.update { current ->
+            val dismissed = current.dismissedUrls + article.url
+            current.copy(
+                favoriteUrls = favorites,
+                dismissedUrls = dismissed,
+                articles = current.articles
+                    .filterNot { it.url in dismissed }
+                    .sortedWith(compareByDescending<Article> { score(it) }.thenByDescending { it.publishedAt })
+            )
+        }
     }
 
     private fun score(article: Article): Int =
@@ -104,10 +119,12 @@ class SubscriptionsViewModel @Inject constructor(
             .flatMapLatest { getArticlesByTopicsUseCase(it) }
             .onEach { articles ->
                 _state.update { state ->
-                    state.copy(articles = articles.sortedWith(
-                        compareByDescending<Article> { score(it) }
-                            .thenByDescending { it.publishedAt }
-                    ))
+                    state.copy(articles = articles
+                        .filterNot { it.url in state.dismissedUrls }
+                        .sortedWith(
+                            compareByDescending<Article> { score(it) }
+                                .thenByDescending { it.publishedAt }
+                        ))
                 }
             }
             .launchIn(viewModelScope)
@@ -137,7 +154,9 @@ sealed interface SubscriptionsCommand {
 data class SubscriptionsState(
     val query: String = "",
     val subscriptions: Map<String, Boolean> = mapOf(),
-    val articles: List<Article> = listOf()
+    val articles: List<Article> = listOf(),
+    val favoriteUrls: Set<String> = emptySet(),
+    val dismissedUrls: Set<String> = emptySet()
 ) {
     val subscribeButtonEnable: Boolean get() = query.isNotBlank()
     val selectedTopics: List<String> get() = subscriptions.filter { it.value }.map { it.key }

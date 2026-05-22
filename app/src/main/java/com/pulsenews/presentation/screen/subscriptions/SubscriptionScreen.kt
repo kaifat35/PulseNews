@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
@@ -83,6 +84,7 @@ fun SubscriptionScreen(
                 items(state.articles, key = { it.url }) { art ->
                     SwipeableArticleCard(
                         article = art,
+                        isFavorite = art.url in state.favoriteUrls,
                         onOpenArticle = onOpenArticle,
                         onSwipe = { liked ->
                             viewModel.processCommand(
@@ -102,6 +104,7 @@ fun SubscriptionScreen(
 @Composable
 private fun SwipeableArticleCard(
     article: Article,
+    isFavorite: Boolean,
     onOpenArticle: (String) -> Unit,
     onSwipe: (Boolean) -> Unit
 ) {
@@ -125,7 +128,12 @@ private fun SwipeableArticleCard(
             )
         }
         Column(Modifier.padding(12.dp)) {
-            Text(article.sourceName, color = MaterialTheme.colorScheme.primary)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(article.sourceName, color = MaterialTheme.colorScheme.primary)
+                if (isFavorite) {
+                    Icon(Icons.Default.Favorite, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                }
+            }
             if (article.author.isNotBlank()) Text(article.author, fontSize = 12.sp)
             Text(
                 article.title,
@@ -140,8 +148,9 @@ private fun SwipeableArticleCard(
             )
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(article.publishedAt.formatDate(), fontSize = 12.sp)
-                Button(onClick = { onOpenArticle(article.url) }) { Text(stringResource(R.string.read)) }
+                Text("Свайп: 👈 пропустить / 👉 в избранное", fontSize = 12.sp)
             }
+            Button(onClick = { onOpenArticle(article.url) }) { Text(stringResource(R.string.read)) }
         }
     }
 }
