@@ -18,6 +18,7 @@ fun NewsResponseDto.toDbModel(topic: String): List<ArticleDbModel> {
             url = it.url,
             imageUrl = it.urlToImage,
             sourceName = it.source.name,
+            author = it.author.orEmpty(),
             topic = topic,
             publishedAt = it.publishedAt.toTimestamp()
         )
@@ -48,7 +49,8 @@ fun List<ArticleDbModel>.toEntities(): List<Article> {
             url = it.url,
             imageUrl = it.imageUrl,
             publishedAt = it.publishedAt,
-            sourceName = it.sourceName
+            sourceName = it.sourceName,
+            author = it.author
         )
     }.distinct()
 }

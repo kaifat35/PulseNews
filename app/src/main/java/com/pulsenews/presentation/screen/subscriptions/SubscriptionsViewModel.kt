@@ -1,5 +1,6 @@
 package com.pulsenews.presentation.screen.subscriptions
 
+import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.pulsenews.domain.entity.Article
@@ -29,7 +30,8 @@ class SubscriptionsViewModel @Inject constructor(
     private val getAllSubscriptionsUseCase: GetAllSubscriptionsUseCase,
     private val getArticlesByTopicsUseCase: GetArticlesByTopicsUseCase,
     private val removeSubscriptionsUseCase: RemoveSubscriptionsUseCase,
-    private val updateSubscribedArticlesUseCase: UpdateSubscribedArticlesUseCase
+    private val updateSubscribedArticlesUseCase: UpdateSubscribedArticlesUseCase,
+    private val preferences: SharedPreferences
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(SubscriptionsState())
@@ -42,94 +44,71 @@ class SubscriptionsViewModel @Inject constructor(
 
     fun processCommand(command: SubscriptionsCommand) {
         when (command) {
-            SubscriptionsCommand.ClearArticles -> {
-                viewModelScope.launch {
-                    val topics = state.value.selectedTopics
-                    clearAllArticlesUseCase(topics)
-                }
+            SubscriptionsCommand.ClearArticles -> viewModelScope.launch { clearAllArticlesUseCase(state.value.selectedTopics) }
+            SubscriptionsCommand.ClickSubscribe -> viewModelScope.launch {
+                addSubscriptionsUseCase(state.value.query.trim())
+                _state.update { it.copy(query = "") }
             }
-
-            SubscriptionsCommand.ClickSubscribe -> {
-                viewModelScope.launch {
-                    _state.update { previousState ->
-                        val topic = state.value.query.trim()
-                        addSubscriptionsUseCase(topic)
-                        previousState.copy("")
-                    }
-                }
-
+            is SubscriptionsCommand.InputTopic -> _state.update { it.copy(query = command.query) }
+            SubscriptionsCommand.RefreshData -> viewModelScope.launch { updateSubscribedArticlesUseCase() }
+            is SubscriptionsCommand.RemoveSubscription -> viewModelScope.launch { removeSubscriptionsUseCase(command.topic) }
+            is SubscriptionsCommand.ToggleTopicSelection -> _state.update {
+                val subscriptions = it.subscriptions.toMutableMap()
+                subscriptions[command.topic] = !(subscriptions[command.topic] ?: false)
+                it.copy(subscriptions = subscriptions)
             }
-
-            is SubscriptionsCommand.InputTopic -> {
-                _state.update { previousState ->
-                    previousState.copy(command.query)
-                }
-            }
-
-            SubscriptionsCommand.RefreshData -> {
-                viewModelScope.launch {
-                    updateSubscribedArticlesUseCase()
-                }
-            }
-
-            is SubscriptionsCommand.RemoveSubscription -> {
-                viewModelScope.launch {
-                    removeSubscriptionsUseCase(command.topic)
-                }
-            }
-
-            is SubscriptionsCommand.ToggleTopicSelection -> {
-                _state.update { previousState ->
-                    val subscriptions = previousState.subscriptions.toMutableMap()
-                    val isSelected = subscriptions[command.topic] ?: false
-                    subscriptions[command.topic] = !isSelected
-                    previousState.copy(subscriptions = subscriptions)
-                }
-            }
+            is SubscriptionsCommand.SwipeArticle -> rateArticle(command.article, command.liked)
         }
     }
+
+    private fun rateArticle(article: Article, liked: Boolean) {
+        val tokens = tokenize(article)
+        preferences.edit().apply {
+            val setKey = if (liked) "favorites" else "disliked"
+            putStringSet(setKey, (preferences.getStringSet(setKey, emptySet()) ?: emptySet()) + article.url)
+            tokens.forEach { token ->
+                val key = "kw_$token"
+                val current = preferences.getInt(key, 0)
+                putInt(key, current + if (liked) 2 else -1)
+            }
+        }.apply()
+    }
+
+    private fun score(article: Article): Int = tokenize(article).sumOf { preferences.getInt("kw_$it", 0) }
+
+    private fun tokenize(article: Article): List<String> =
+        (article.title + " " + article.description).lowercase()
+            .split(Regex("[^\\p{L}\\p{Nd}]+"))
+            .filter { it.length > 2 }
 
     @OptIn(ExperimentalCoroutinesApi::class)
     private fun observeSelectedTopics() {
         state.map { it.selectedTopics }
             .distinctUntilChanged()
-            .flatMapLatest {
-                getArticlesByTopicsUseCase(it)
-            }
-            .onEach {
-                _state.update { previousState ->
-                    previousState.copy(articles = it)
+            .flatMapLatest { getArticlesByTopicsUseCase(it) }
+            .onEach { articles ->
+                _state.update { state ->
+                    state.copy(articles = articles.sortedByDescending { score(it) to it.publishedAt })
                 }
             }
             .launchIn(viewModelScope)
     }
 
     private fun observeSubscriptions() {
-        getAllSubscriptionsUseCase()
-            .onEach { subscriptions ->
-                _state.update { previousState ->
-                    val updateTopics = subscriptions.associateWith { topic ->
-                        previousState.subscriptions[topic] ?: true
-                    }
-                    previousState.copy(subscriptions = updateTopics)
-                }
-            }.launchIn(viewModelScope)
+        getAllSubscriptionsUseCase().onEach { subscriptions ->
+            _state.update { prev -> prev.copy(subscriptions = subscriptions.associateWith { prev.subscriptions[it] ?: true }) }
+        }.launchIn(viewModelScope)
     }
 }
 
 sealed interface SubscriptionsCommand {
-
     data class InputTopic(val query: String) : SubscriptionsCommand
-
     data object ClickSubscribe : SubscriptionsCommand
-
     data object RefreshData : SubscriptionsCommand
-
     data class ToggleTopicSelection(val topic: String) : SubscriptionsCommand
-
     data object ClearArticles : SubscriptionsCommand
-
     data class RemoveSubscription(val topic: String) : SubscriptionsCommand
+    data class SwipeArticle(val article: Article, val liked: Boolean) : SubscriptionsCommand
 }
 
 data class SubscriptionsState(
@@ -137,9 +116,6 @@ data class SubscriptionsState(
     val subscriptions: Map<String, Boolean> = mapOf(),
     val articles: List<Article> = listOf()
 ) {
-    val subscribeButtonEnable: Boolean
-        get() = query.isNotBlank()
-
-    val selectedTopics: List<String>
-        get() = subscriptions.filter { it.value }.map { it.key }
+    val subscribeButtonEnable: Boolean get() = query.isNotBlank()
+    val selectedTopics: List<String> get() = subscriptions.filter { it.value }.map { it.key }
 }
