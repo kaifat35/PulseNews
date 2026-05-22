@@ -1,6 +1,7 @@
 package com.pulsenews.presentation.screen.subscriptions
 
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -13,6 +14,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
@@ -30,16 +32,22 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.offset
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.sp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import coil3.compose.AsyncImage
@@ -52,6 +60,7 @@ import kotlin.math.abs
 fun SubscriptionScreen(
     onNavigationToSettings: () -> Unit,
     onOpenArticle: (String) -> Unit,
+    onNavigateToFavorites: () -> Unit,
     viewModel: SubscriptionsViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsState()
@@ -59,28 +68,32 @@ fun SubscriptionScreen(
         SubscriptionTopBar(
             { viewModel.processCommand(SubscriptionsCommand.RefreshData) },
             { viewModel.processCommand(SubscriptionsCommand.ClearArticles) },
-            onNavigationToSettings
+            onNavigationToSettings,
+            onNavigateToFavorites
         )
     }) { innerPadding ->
-        LazyColumn(
+        Column(
             Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp),
-            contentPadding = innerPadding,
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(innerPadding)
+                .padding(horizontal = 16.dp)
         ) {
-            item {
-                Subscriptions(
-                    state.subscriptions,
-                    state.query,
-                    state.subscribeButtonEnable,
-                    { viewModel.processCommand(SubscriptionsCommand.InputTopic(it)) },
-                    { viewModel.processCommand(SubscriptionsCommand.ToggleTopicSelection(it)) },
-                    { viewModel.processCommand(SubscriptionsCommand.RemoveSubscription(it)) },
-                    { viewModel.processCommand(SubscriptionsCommand.ClickSubscribe) })
-            }
-            if (state.articles.isNotEmpty()) {
-                item { Text("Pulse News: свайпни 👈/👉", fontWeight = FontWeight.Bold) }
+            Text(
+                text = stringResource(R.string.swipe_hint),
+                fontSize = 12.sp,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                item {
+                    Subscriptions(
+                        state.subscriptions,
+                        state.query,
+                        state.subscribeButtonEnable,
+                        { viewModel.processCommand(SubscriptionsCommand.InputTopic(it)) },
+                        { viewModel.processCommand(SubscriptionsCommand.ToggleTopicSelection(it)) },
+                        { viewModel.processCommand(SubscriptionsCommand.RemoveSubscription(it)) },
+                        { viewModel.processCommand(SubscriptionsCommand.ClickSubscribe) })
+                }
                 items(state.articles, key = { it.url }) { art ->
                     SwipeableArticleCard(
                         article = art,
@@ -102,30 +115,59 @@ fun SubscriptionScreen(
 }
 
 @Composable
-private fun SwipeableArticleCard(
+fun SwipeableArticleCard(
     article: Article,
     isFavorite: Boolean,
     onOpenArticle: (String) -> Unit,
-    onSwipe: (Boolean) -> Unit
+    onSwipe: (Boolean) -> Unit,
+    enableSwipe: Boolean = true
 ) {
     var drag by remember { mutableStateOf(0f) }
+    var swipeFeedback by remember { mutableStateOf<Int?>(null) }
+    LaunchedEffect(swipeFeedback) {
+        if (swipeFeedback != null) {
+            kotlinx.coroutines.delay(500)
+            swipeFeedback = null
+        }
+    }
     Card(
         Modifier
             .fillMaxWidth()
-            .pointerInput(article.url) {
+            .pointerInput(article.url, enableSwipe) {
+                if (!enableSwipe) return@pointerInput
                 detectHorizontalDragGestures(
                     onHorizontalDrag = { _, amt -> drag += amt },
-                    onDragEnd = { if (abs(drag) > 120f) onSwipe(drag > 0); drag = 0f })
+                    onDragEnd = {
+                        if (abs(drag) > 120f) {
+                            val liked = drag > 0
+                            swipeFeedback = if (liked) R.string.saved_to_favorites else R.string.skipped
+                            onSwipe(liked)
+                        }
+                        drag = 0f
+                    })
             }) {
-        article.imageUrl?.let {
-            AsyncImage(
-                model = it,
-                contentDescription = null,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(200.dp),
-                contentScale = ContentScale.Crop
-            )
+        Box {
+            article.imageUrl?.let {
+                AsyncImage(
+                    model = it,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(200.dp),
+                    contentScale = ContentScale.Crop
+                )
+            }
+            swipeFeedback?.let { messageRes ->
+                Text(
+                    text = stringResource(messageRes),
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .graphicsLayer(scaleX = 1.15f, scaleY = 1.15f)
+                        .alpha(0.92f)
+                        .offset { IntOffset(0, -8) },
+                    fontWeight = FontWeight.ExtraBold
+                )
+            }
         }
         Column(Modifier.padding(12.dp)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -148,7 +190,9 @@ private fun SwipeableArticleCard(
             )
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(article.publishedAt.formatDate(), fontSize = 12.sp)
-                Text("Свайп: 👈 пропустить / 👉 в избранное", fontSize = 12.sp)
+                if (enableSwipe) {
+                    Icon(Icons.Default.FavoriteBorder, contentDescription = null)
+                }
             }
             Button(onClick = { onOpenArticle(article.url) }) { Text(stringResource(R.string.read)) }
         }
@@ -160,7 +204,8 @@ private fun SwipeableArticleCard(
 private fun SubscriptionTopBar(
     onRefreshDataClick: () -> Unit,
     onClearArticlesClick: () -> Unit,
-    onSettingsClick: () -> Unit
+    onSettingsClick: () -> Unit,
+    onFavoritesClick: () -> Unit
 ) {
     TopAppBar(
         title = { Text(stringResource(R.string.subscriptions_title)) },
@@ -173,6 +218,9 @@ private fun SubscriptionTopBar(
             }
             IconButton(onClick = onSettingsClick) {
                 Icon(Icons.Default.Settings, null)
+            }
+            IconButton(onClick = onFavoritesClick) {
+                Icon(Icons.Default.Favorite, contentDescription = stringResource(R.string.favorites_title))
             }
         }
     )
