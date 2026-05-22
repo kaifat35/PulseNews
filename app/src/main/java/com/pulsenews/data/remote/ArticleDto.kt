@@ -6,6 +6,8 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class ArticleDto(
+    @SerialName("author")
+    val author: String? = "",
     @SerialName("description")
     val description: String = "",
     @SerialName("publishedAt")

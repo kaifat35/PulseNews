@@ -23,6 +23,7 @@ import retrofit2.Retrofit
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
 import retrofit2.create
 import javax.inject.Singleton
+import android.content.SharedPreferences
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -100,6 +101,12 @@ interface DataModule {
             ).fallbackToDestructiveMigration(true)
                 .build()
         }
+
+
+        @Provides
+        @Singleton
+        fun provideSharedPreferences(@ApplicationContext context: Context): SharedPreferences =
+            context.getSharedPreferences("tinder_news_prefs", Context.MODE_PRIVATE)
 
         @Singleton
         @Provides
