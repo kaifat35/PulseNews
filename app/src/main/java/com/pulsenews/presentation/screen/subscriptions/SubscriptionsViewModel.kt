@@ -119,7 +119,8 @@ class SubscriptionsViewModel @Inject constructor(
             .flatMapLatest { getArticlesByTopicsUseCase(it) }
             .onEach { articles ->
                 _state.update { state ->
-                    state.copy(articles = articles
+                    state.copy(
+                        articles = articles
                         .filterNot { it.url in state.dismissedUrls }
                         .sortedWith(
                             compareByDescending<Article> { score(it) }
