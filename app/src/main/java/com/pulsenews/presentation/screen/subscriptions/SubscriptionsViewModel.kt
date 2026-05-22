@@ -44,19 +44,31 @@ class SubscriptionsViewModel @Inject constructor(
 
     fun processCommand(command: SubscriptionsCommand) {
         when (command) {
-            SubscriptionsCommand.ClearArticles -> viewModelScope.launch { clearAllArticlesUseCase(state.value.selectedTopics) }
+            SubscriptionsCommand.ClearArticles -> viewModelScope.launch {
+                clearAllArticlesUseCase(
+                    state.value.selectedTopics
+                )
+            }
+
             SubscriptionsCommand.ClickSubscribe -> viewModelScope.launch {
                 addSubscriptionsUseCase(state.value.query.trim())
                 _state.update { it.copy(query = "") }
             }
+
             is SubscriptionsCommand.InputTopic -> _state.update { it.copy(query = command.query) }
             SubscriptionsCommand.RefreshData -> viewModelScope.launch { updateSubscribedArticlesUseCase() }
-            is SubscriptionsCommand.RemoveSubscription -> viewModelScope.launch { removeSubscriptionsUseCase(command.topic) }
+            is SubscriptionsCommand.RemoveSubscription -> viewModelScope.launch {
+                removeSubscriptionsUseCase(
+                    command.topic
+                )
+            }
+
             is SubscriptionsCommand.ToggleTopicSelection -> _state.update {
                 val subscriptions = it.subscriptions.toMutableMap()
                 subscriptions[command.topic] = !(subscriptions[command.topic] ?: false)
                 it.copy(subscriptions = subscriptions)
             }
+
             is SubscriptionsCommand.SwipeArticle -> rateArticle(command.article, command.liked)
         }
     }
@@ -65,7 +77,10 @@ class SubscriptionsViewModel @Inject constructor(
         val tokens = tokenize(article)
         preferences.edit().apply {
             val setKey = if (liked) "favorites" else "disliked"
-            putStringSet(setKey, (preferences.getStringSet(setKey, emptySet()) ?: emptySet()) + article.url)
+            putStringSet(
+                setKey,
+                (preferences.getStringSet(setKey, emptySet()) ?: emptySet()) + article.url
+            )
             tokens.forEach { token ->
                 val key = "kw_$token"
                 val current = preferences.getInt(key, 0)
@@ -74,7 +89,8 @@ class SubscriptionsViewModel @Inject constructor(
         }.apply()
     }
 
-    private fun score(article: Article): Int = tokenize(article).sumOf { preferences.getInt("kw_$it", 0) }
+    private fun score(article: Article): Int =
+        tokenize(article).sumOf { preferences.getInt("kw_$it", 0) }
 
     private fun tokenize(article: Article): List<String> =
         (article.title + " " + article.description).lowercase()
@@ -88,7 +104,10 @@ class SubscriptionsViewModel @Inject constructor(
             .flatMapLatest { getArticlesByTopicsUseCase(it) }
             .onEach { articles ->
                 _state.update { state ->
-                    state.copy(articles = articles.sortedByDescending { score(it) to it.publishedAt })
+                    state.copy(articles = articles.sortedWith(
+                        compareByDescending<Article> { score(it) }
+                            .thenByDescending { it.publishedAt }
+                    ))
                 }
             }
             .launchIn(viewModelScope)
@@ -96,7 +115,11 @@ class SubscriptionsViewModel @Inject constructor(
 
     private fun observeSubscriptions() {
         getAllSubscriptionsUseCase().onEach { subscriptions ->
-            _state.update { prev -> prev.copy(subscriptions = subscriptions.associateWith { prev.subscriptions[it] ?: true }) }
+            _state.update { prev ->
+                prev.copy(subscriptions = subscriptions.associateWith {
+                    prev.subscriptions[it] ?: true
+                })
+            }
         }.launchIn(viewModelScope)
     }
 }
