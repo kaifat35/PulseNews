@@ -1,6 +1,11 @@
 <resources>
     <string name="app_name">News</string>
     <string name="subscriptions_title">My News</string>
+    <string name="swipe_hint">Swipe: 👈 skip / 👉 favorite</string>
+    <string name="favorites_title">Favorites</string>
+    <string name="no_favorites">No favorites yet</string>
+    <string name="saved_to_favorites">💖 Saved</string>
+    <string name="skipped">👋 Skipped</string>
     <string name="update_articles">Update Articles</string>
     <string name="clear_articles">Clear Articles</string>
     <string name="settings_screen">settings screen</string>
