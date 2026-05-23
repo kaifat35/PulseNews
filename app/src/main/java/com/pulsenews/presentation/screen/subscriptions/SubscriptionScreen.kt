@@ -1,6 +1,5 @@
 package com.pulsenews.presentation.screen.subscriptions
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,19 +25,18 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
@@ -53,6 +51,7 @@ import coil3.compose.AsyncImage
 import com.pulsenews.R
 import com.pulsenews.domain.entity.Article
 import com.pulsenews.presentation.utils.formatDate
+import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -64,12 +63,21 @@ fun SubscriptionScreen(
     viewModel: SubscriptionsViewModel = hiltViewModel()
 ) {
     val state by viewModel.state.collectAsState()
-    Scaffold(topBar = {
-        SubscriptionTopBar(
-            { viewModel.processCommand(SubscriptionsCommand.RefreshData) },
-            { viewModel.processCommand(SubscriptionsCommand.ClearArticles) }
-        )
-    }) { innerPadding ->
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+
+    val savedToFavoritesText = stringResource(R.string.saved_to_favorites)
+    val skippedText = stringResource(R.string.skipped)
+
+    Scaffold(
+        topBar = {
+            SubscriptionTopBar(
+                onRefreshDataClick = { viewModel.processCommand(SubscriptionsCommand.RefreshData) },
+                onClearArticlesClick = { viewModel.processCommand(SubscriptionsCommand.ClearArticles) }
+            )
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) }
+    ) { innerPadding ->
         Column(
             Modifier
                 .fillMaxWidth()
@@ -84,26 +92,49 @@ fun SubscriptionScreen(
             LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 item {
                     Subscriptions(
-                        state.subscriptions,
-                        state.query,
-                        state.subscribeButtonEnable,
-                        { viewModel.processCommand(SubscriptionsCommand.InputTopic(it)) },
-                        { viewModel.processCommand(SubscriptionsCommand.ToggleTopicSelection(it)) },
-                        { viewModel.processCommand(SubscriptionsCommand.RemoveSubscription(it)) },
-                        { viewModel.processCommand(SubscriptionsCommand.ClickSubscribe) })
+                        subscriptions = state.subscriptions,
+                        query = state.query,
+                        isSubscribeButtonEnabled = state.subscribeButtonEnable,
+                        onQueryChanged = {
+                            viewModel.processCommand(
+                                SubscriptionsCommand.InputTopic(
+                                    it
+                                )
+                            )
+                        },
+                        onTopicClick = {
+                            viewModel.processCommand(
+                                SubscriptionsCommand.ToggleTopicSelection(
+                                    it
+                                )
+                            )
+                        },
+                        onDeleteSubscription = {
+                            viewModel.processCommand(
+                                SubscriptionsCommand.RemoveSubscription(
+                                    it
+                                )
+                            )
+                        },
+                        onSubscribeButtonClick = { viewModel.processCommand(SubscriptionsCommand.ClickSubscribe) }
+                    )
                 }
-                items(state.articles, key = { it.url }) { art ->
+                items(state.articles, key = { it.url }) { article ->
                     SwipeableArticleCard(
-                        article = art,
-                        isFavorite = art.url in state.favoriteUrls,
+                        article = article,
+                        isFavorite = article.url in state.favoriteUrls,
                         onOpenArticle = onOpenArticle,
                         onSwipe = { liked ->
                             viewModel.processCommand(
                                 SubscriptionsCommand.SwipeArticle(
-                                    art,
+                                    article,
                                     liked
                                 )
                             )
+                            scope.launch {
+                                val message = if (liked) savedToFavoritesText else skippedText
+                                snackbarHostState.showSnackbar(message)
+                            }
                         }
                     )
                 }
@@ -120,15 +151,7 @@ fun SwipeableArticleCard(
     onSwipe: (Boolean) -> Unit,
     enableSwipe: Boolean = true
 ) {
-    var drag by remember { mutableStateOf(0f) }
-    var swipeFeedback by remember { mutableStateOf<Int?>(null) }
-
-    LaunchedEffect(swipeFeedback) {
-        if (swipeFeedback != null) {
-            kotlinx.coroutines.delay(800) // увеличил до 800 мс
-            swipeFeedback = null
-        }
-    }
+    var drag by remember { mutableFloatStateOf(0f) }
 
     Box(
         modifier = Modifier
@@ -140,7 +163,6 @@ fun SwipeableArticleCard(
                     onDragEnd = {
                         if (abs(drag) > 120f) {
                             val liked = drag > 0
-                            swipeFeedback = if (liked) R.string.saved_to_favorites else R.string.skipped
                             onSwipe(liked)
                         }
                         drag = 0f
@@ -189,35 +211,11 @@ fun SwipeableArticleCard(
                     )
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text(article.publishedAt.formatDate(), fontSize = 12.sp)
-                        // Убрана дублирующая иконка FavoriteBorder
                     }
                     Button(onClick = { onOpenArticle(article.url) }) {
                         Text(stringResource(R.string.read))
                     }
                 }
-            }
-        }
-
-        // Улучшенная анимация свайпа (видимая поверх карточки)
-        swipeFeedback?.let { messageRes ->
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .background(Color.Black.copy(alpha = 0.7f))
-                    .graphicsLayer(
-                        scaleX = if (drag > 0) 1.2f else 1.2f,
-                        scaleY = if (drag > 0) 1.2f else 1.2f
-                    )
-                    .padding(16.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = stringResource(messageRes),
-                    color = Color.White,
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center
-                )
             }
         }
     }
@@ -260,32 +258,36 @@ private fun Subscriptions(
             label = { Text(stringResource(R.string.what_interests_you)) }
         )
         Button(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth()
+                .padding(top = 8.dp),
             onClick = onSubscribeButtonClick,
             enabled = isSubscribeButtonEnabled
-        ) { Text(stringResource(R.string.add_subscription_button)) }
-        if (subscriptions.isNotEmpty()) LazyRow {
-            subscriptions.forEach { (topic, selected) ->
-                item {
-                    FilterChip(
-                        selected = selected,
-                        onClick = { onTopicClick(topic) },
-                        label = { Text(topic) },
-                        trailingIcon = {
-                            IconButton(onClick = { onDeleteSubscription(topic) }) {
-                                Icon(
-                                    Icons.Default.Clear,
-                                    null
-                                )
+        ) {
+            Text(stringResource(R.string.add_subscription_button))
+        }
+        if (subscriptions.isNotEmpty()) {
+            LazyRow {
+                subscriptions.forEach { (topic, selected) ->
+                    item {
+                        FilterChip(
+                            selected = selected,
+                            onClick = { onTopicClick(topic) },
+                            label = { Text(topic) },
+                            trailingIcon = {
+                                IconButton(onClick = { onDeleteSubscription(topic) }) {
+                                    Icon(Icons.Default.Clear, null)
+                                }
                             }
-                        })
+                        )
+                    }
                 }
             }
+        } else {
+            Text(
+                modifier = Modifier.fillMaxWidth(),
+                text = stringResource(R.string.no_subscriptions),
+                textAlign = TextAlign.Center
+            )
         }
-        else Text(
-            modifier = Modifier.fillMaxWidth(),
-            text = stringResource(R.string.no_subscriptions),
-            textAlign = TextAlign.Center
-        )
     }
 }

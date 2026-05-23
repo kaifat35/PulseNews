@@ -120,8 +120,7 @@ fun SettingsScreen(
                                     viewModel.processCommand(SettingsCommand.SelectInterval(it))
                                 },
                                 itemAsString = {
-                                    it.toReadableFormat()
-
+                                    it.toLocalizedName()
                                 }
                             )
                         }

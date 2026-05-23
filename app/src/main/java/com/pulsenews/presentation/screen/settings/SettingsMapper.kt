@@ -20,14 +20,14 @@ fun Language.toReadableFormat(): String {
 }
 
 @Composable
-fun Interval.toReadableFormat(): String {
+fun Interval.toLocalizedName(): String {
     return when (this) {
-        Interval.MIN_15 -> "15 minutes"
-        Interval.MIN_30 -> "30 minutes"
-        Interval.HOUR_1 -> "1 hour"
-        Interval.HOUR_2 -> "2 hours"
-        Interval.HOUR_4 -> "4 hours"
-        Interval.HOUR_8 -> "8 hours"
-        Interval.HOUR_24 -> "24 hours"
+        Interval.MIN_15 -> stringResource(R.string.interval_15_minutes)
+        Interval.MIN_30 -> stringResource(R.string.interval_30_minutes)
+        Interval.HOUR_1 -> stringResource(R.string.interval_1_hour)
+        Interval.HOUR_2 -> stringResource(R.string.interval_2_hours)
+        Interval.HOUR_4 -> stringResource(R.string.interval_4_hours)
+        Interval.HOUR_8 -> stringResource(R.string.interval_8_hours)
+        Interval.HOUR_24 -> stringResource(R.string.interval_24_hours)
     }
 }
