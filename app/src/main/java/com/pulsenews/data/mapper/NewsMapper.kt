@@ -30,10 +30,6 @@ fun Language.toQueryParam(): String {
         Language.ENGLISH -> "en"
 
         Language.RUSSIAN -> "ru"
-
-        Language.FRENCH -> "fr"
-
-        Language.GERMAN -> "de"
     }
 }
 

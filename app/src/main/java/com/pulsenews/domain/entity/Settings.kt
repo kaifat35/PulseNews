@@ -9,7 +9,7 @@ data class Settings(
 
     companion object {
 
-        val DEFAULT_LANGUAGE = Language.ENGLISH
+        val DEFAULT_LANGUAGE = Language.RUSSIAN
         val DEFAULT_INTERVAL = Interval.MIN_15
         const val DEFAULT_NOTIFICATION_ENABLED = false
         const val DEFAULT_WIFI_ONLY = true
@@ -17,7 +17,7 @@ data class Settings(
 }
 
 enum class Language {
-    ENGLISH, RUSSIAN, FRENCH, GERMAN
+    ENGLISH, RUSSIAN
 }
 
 enum class Interval(val minutes: Int) {

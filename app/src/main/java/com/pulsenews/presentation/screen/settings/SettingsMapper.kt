@@ -16,14 +16,6 @@ fun Language.toReadableFormat(): String {
         Language.RUSSIAN -> {
             stringResource(R.string.russian)
         }
-
-        Language.FRENCH -> {
-            stringResource(R.string.francais)
-        }
-
-        Language.GERMAN -> {
-            stringResource(R.string.deutsch)
-        }
     }
 }
 
